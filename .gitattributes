@@ -1,2 +1,8 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Audio/image deliverables are binary -- never normalize or diff as text
+*.wav binary
+*.png binary
+*.flac binary
+*.mp3 binary
