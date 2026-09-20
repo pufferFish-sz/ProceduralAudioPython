@@ -1,36 +1,31 @@
-# 各 Stage 公式与模型通俗讲解
+# Plain-Language Guide to the Formulas and Models in Each Stage
 
-> 面向"能看懂高中物理"的读者。公式用 Unicode 直接书写，不依赖 LaTeX 渲染。
-> 对应代码：`proto/core/` 各模块；验证脚本：`proto/stages/`。
+> Corresponding code: modules under `proto/core/`; validation scripts: `proto/stages/`.
 
-**全文主线**：`q` 就是你最终听到的东西——"物体表面某种振动花纹此刻凹凸了多远"，
-随时间画出来是一条衰减的正弦波，即声音波形本身。其余所有公式（接触力、摩擦噪声、
-颗粒触发）都在回答同一个问题：**用什么样的力去推这些弹簧小球**。
+**The central idea of this document**: `q` is what you ultimately hear. The instantaneous displacement of a particular vibration pattern on an object's surface. Plotted over time, it is a decaying sine wave of the sound waveform itself. Every other formula (contact force, friction noise, and grain triggering) answers the same question of **what kind of force should push these little mass-and-spring systems?**
 
 ---
 
-## Stage 1 · 模态振子（modal bank）— `core/modal_bank.py`
+## Stage 1 · Modal Oscillators (Modal Bank) — `core/modal_bank.py`
 
-**类比**：敲一下碗，碗会按几种固定的"花纹"同时振动。每种花纹 = 一个模态 =
-一个挂在弹簧上的小球。听到的声音就是这几个小球摆动的叠加。
+**Analogy**: Strike a bowl and it vibrates simultaneously in several fixed patterns. Each pattern is one mode, represented as a small mass attached to a spring. The sound you hear is the sum of these oscillating masses.
 
 ```
 q̈ₙ + 2·dₙ·q̇ₙ + ωₙ²·qₙ = f(t) / mₙ
 ```
 
-**读法**：小球的加速度 + 摩擦拖慢它的项 + 弹簧往回拉的项 = 外力除以质量。
-其实就是牛顿第二定律 F = ma 移了个项。
+**How to read it**: the mass's acceleration, plus a friction term that slows it down, plus a spring term that pulls it back, equals the external force divided by mass. This is simply Newton's second law, F = ma, with terms rearranged.
 
-| 符号 | 含义 |
-|------|------|
-| qₙ | 第 n 个小球此刻偏离静止位置多远（碗面凹下去/凸起来的量）。随时间画出来就是一条衰减正弦波——这就是声音本身 |
-| q̇, q̈ | q 上面的点 = 对时间求导。一个点是速度，两个点是加速度 |
-| ωₙ | 弹簧劲度决定的摆动快慢 = 这个模态的音高。ω = 2πf |
-| dₙ | 摩擦大小 = 余音长短。d 越大声音消失越快，振幅按 e^(−d·t) 缩水 |
-| mₙ | 小球的质量 = 惯性。越重，同样的力推出来的振幅越小 |
-| f(t) | 外面敲它的力，随时间变化。Stage 3 就是在算这个力长什么样 |
+| Symbol | Meaning |
+|--------|---------|
+| qₙ | How far the nth mass is displaced from rest at this instant (how far the bowl's surface is pushed inward or outward). Plotted over time, it is a decaying sine wave—the sound itself |
+| q̇, q̈ | A dot over q means a derivative with respect to time. One dot is velocity; two dots are acceleration |
+| ωₙ | The oscillation rate set by the spring stiffness: the pitch of this mode. ω = 2πf |
+| dₙ | The amount of damping: how long the sound rings. A larger d makes the sound disappear faster, with amplitude shrinking as e^(−d·t) |
+| mₙ | The mass, or inertia. The heavier it is, the less it moves under the same force |
+| f(t) | The external striking force as it changes over time. Stage 3 calculates the shape of this force |
 
-**数字化（impulse-invariant 离散化）**：
+**Digital implementation (impulse-invariant discretization)**:
 
 ```
 y[i] = a₁·y[i−1] + a₂·y[i−2] + b₁·f[i−1]
@@ -38,233 +33,172 @@ y[i] = a₁·y[i−1] + a₂·y[i−2] + b₁·f[i−1]
 a₁ = 2·e^(−d·T)·cos(ω_d·T)     a₂ = −e^(−2·d·T)     ω_d = √(ω₀² − d²)
 ```
 
-电脑没法连续解方程，只能每 1/44100 秒（T = 一格）记一格。这条递推式说：
-只要记住前两格的值，就能推出下一格——两个旧点足够画出"衰减正弦"的下一步。
-系数 a₁、a₂ 由 ω、d 换算而来，换算方式保证数字版的音高和余音跟连续方程
-**一模一样**（极点位置精确），所以 stage 1 的 gate 能对到 0.1% 以内。
+A computer cannot solve the equation continuously, it can only record one value every 1/44100 second (`T` is one sample interval). This recurrence says that remembering the previous two values is enough to calculate the next one—two old points are sufficient to extend a decaying sinusoid by one step. The coefficients a₁ and a₂ are derived from ω and d so that the digital version has **exactly the same** pitch and decay as the continuous equation (its pole locations are exact). That is why the Stage 1 gate agrees to within 0.1%.
 
 ---
 
-## Stage 2 · 材质 = 一个数字（tan φ）— `core/materials.py`
+## Stage 2 · Material = One Number (`tanφ`) — `core/materials.py`
 
-**类比**：敲玻璃杯"叮——"余音很长，敲橡皮"噗"立刻没了。区别不在音高，
-在声音消失的快慢。（Klatzky/Pai/Krotkov 2000 的实验结论：人耳判断材质
-主要靠衰减快慢，而不是音高；音高听出来的是大小和形状。）
+**Analogy**: Tap a glass and it rings for a long time; tap rubber and the sound dies immediately. The main difference is not pitch but how quickly the sound decays. (The experimental conclusion of Klatzky/Pai/Krotkov 2000 is that listeners judge material primarily from decay rate rather than pitch; pitch conveys size and shape.)
 
 ```
 dₙ = π·fₙ·tanφ        ⟺        τₙ = 1 / (π·fₙ·tanφ)
 ```
 
-**读法**：一个模态每秒损耗的比例（d）= 它的频率 × 材料常数。为什么和频率挂钩？
-材料内部每"弯折"一次就损耗一点能量，振得越快、每秒弯折次数越多、能量丢得越快——
-所以任何材料都是**高音先消失**，只是快慢不同。
+**How to read it**: a mode's loss per second (`d`) equals its frequency multiplied by a material constant. Why does frequency matter? Each internal bending cycle loses a little energy. A mode that vibrates faster undergoes more bending cycles per second and therefore loses energy faster. In every material, **high frequencies die away first**; only the rate differs.
 
-| 符号 | 含义 |
-|------|------|
-| tanφ | 材料的"内摩擦"：每次弯折损耗掉的能量比例。整个材质系统只调这一个数 |
-| τₙ | 衰减时间：振幅缩到原来 37%（1/e）所需的秒数，是 d 的倒数 |
+| Symbol | Meaning |
+|--------|---------|
+| tanφ | The material's “internal friction”: the proportion of energy lost in each bending cycle. This is the only value adjusted for the entire material system |
+| τₙ | Decay time: the number of seconds required for amplitude to fall to 37% (1/e) of its original value. It is the reciprocal of d |
 
-材质表：metal 0.0002 → glass 0.0008 → wood 0.012 → plastic 0.05 → rubber 0.15
-（tanφ 越大余音越短）。模态频率集（"形状"）完全不动。
+Material table: metal 0.0002 → glass 0.0008 → wood 0.012 → plastic 0.05 → rubber 0.15 (a larger tanφ means a shorter ring). The set of modal frequencies—the “shape”—does not change at all.
 
-### 问答：金属频率高、每秒振动次数多，为什么反而内摩擦小？
+### Q&A: Metal has high frequencies and vibrates more times per second, so why does it have low internal friction?
 
-**拆开"每秒"和"每圈"**：`d = π·f·tanφ` 本身就是"每圈损耗 × 每秒圈数"的结构。
-tanφ 是"弯折一个来回损耗掉储能的百分之几"（与频率无关），f 是每秒来回数，
-乘起来才是每秒衰减率。"振得快死得快"的直觉已经体现在公式里——同一材料内
-高频模态确实先消失；金属 vs 橡胶比的不是频率，是每圈损耗比例，差三个数量级。
+**Separate “per second” from “per cycle”**: `d = π·f·tanφ` already has the structure “loss per cycle × cycles per second.” `tanφ` is the percentage of stored energy lost during one complete bending cycle (independent of frequency), while `f` is the number of cycles per second. Multiplying them gives the decay rate per second. The intuition that “faster vibrations die faster” is already built into the formula: within a single material, high-frequency modes really do disappear first. Metal and rubber differ not in frequency but in their loss per cycle, which differs by three orders of magnitude.
 
-数字例子，同样 5000 Hz 的模态：金属 tanφ=0.0002 → τ≈0.3 s；
-木头 tanφ=0.012 → τ≈5 ms。频率相同，余音差 60 倍，全是 tanφ 的贡献。
+For a numerical example, consider the same 5000 Hz mode: metal with tanφ=0.0002 gives τ≈0.3 s, while wood with tanφ=0.012 gives τ≈5 ms. At the same frequency, the ringing differs by a factor of 60, entirely because of tanφ.
 
-**tanφ 跟材料的什么挂钩**：微观上"有没有东西在互相蹭"。弹性变形把能量存进
-原子键，理想情况全数归还；损耗来自把整齐振动变成热的微观过程——
+**What material property determines tanφ?** At the microscopic scale, it depends on whether internal structures rub against one another. Elastic deformation stores energy in atomic bonds and, ideally, returns all of it. Loss comes from microscopic processes that turn coordinated vibration into heat:
 
-- 金属：规整晶格、原子键硬而弹，仅晶体缺陷（位错、晶界、热弹性）漏一点 → ~10⁻⁴
-- 玻璃：无定形但强键刚性网络，没什么可蹭 → 也很小
-- 木头：纤维素纤维+木质素复合体，纤维/链段间微滑移摩擦 → 中等
-- 塑料/橡胶：缠绕长链分子滑动解缠重排，微观上像在蜂蜜里搅拌 → 极大
-  （橡胶在玻璃化转变温度附近损耗最大，冻硬后敲起来会变脆变响）
+- Metal: an orderly crystal lattice with stiff, elastic atomic bonds; only crystal defects (dislocations, grain boundaries, and thermoelastic effects) leak a little energy → ~10⁻⁴
+- Glass: amorphous, but still a rigid network of strong bonds with little internal rubbing → also very low
+- Wood: a composite of cellulose fibers and lignin, with friction from microscopic sliding between fibers and chain segments → moderate
+- Plastic/rubber: entangled long-chain molecules slide, disentangle, and rearrange—microscopically like stirring honey → extremely high
+  (Rubber has its greatest loss near its glass-transition temperature; when frozen rigid, it sounds brittle and rings more clearly when struck.)
 
-**tanφ 名字的来源**：周期拉伸有损耗材料时应变滞后应力一个相位角 φ
-（纯弹性 0°，纯粘性 90°），应力-应变回滞环的面积 = 每圈变成热的能量，
-正比于 tanφ——它天生就是"每圈损耗比例"的度量。
+**Where the name tanφ comes from**: when a lossy material is stretched periodically, its strain lags behind its stress by a phase angle φ (0° for a purely elastic material, 90° for a purely viscous one). The area of the stress-strain hysteresis loop equals the energy converted to heat per cycle and is proportional to tanφ, so tanφ is naturally a measure of “loss per cycle.”
 
-**隐藏混淆点**："金属频率高"由刚度和几何决定（f ∝ √(E/ρ) × 形状因子），
-与损耗无关——大钟也是金属，频率低，余音照样长。刚度（存能）和内摩擦（漏能）
-是两个独立属性；stage 2 正是利用这一点：频率集管形状，tanφ 单独管材质。
+**A common source of confusion**: a metal's high frequencies are determined by stiffness and geometry (`f ∝ √(E/ρ) × shape factor`), not by loss. A large bell is also metal; it has a low frequency but still rings for a long time. Stiffness (energy storage) and internal friction (energy leakage) are independent properties. Stage 2 relies on exactly this separation: the frequency set controls shape, while tanφ independently controls material.
 
 ---
 
-## Stage 3 · 接触力（Hunt–Crossley）— `core/impact.py`
+## Stage 3 · Contact Force (Hunt–Crossley) — `core/impact.py`
 
-**类比**：锤子敲桌面的一瞬间不是"啪"一个点，而是一小段"压进去又弹出来"的过程。
-乒乓球（硬）接触短促清脆，橡胶球（软）接触时间长、声音闷。
+**Analogy**: When a hammer strikes a table, the impact is not a single instantaneous “click”; it is a short process of compressing the surfaces and then releasing them. A hard ping-pong ball has a short, sharp contact, while a soft rubber ball remains in contact longer and sounds duller.
 
 ```
-f(x, ẋ) = k·x^α + λ·x^α·ẋ        （压缩 x > 0 时；否则 0；钳位 f ≥ 0）
+f(x, ẋ) = k·x^α + λ·x^α·ẋ        (while compression x > 0; otherwise 0; clamped to f ≥ 0)
 ```
 
-**读法**：接触力 = 弹簧项 + 损耗项。x 是"两个表面互相压进去多深"
-（像手指按气球的凹陷深度），只在碰上了（x > 0）时有力。
+**How to read it**: contact force equals a spring term plus a loss term. `x` is how deeply the two surfaces compress into one another—like the indentation made by pressing a finger into a balloon. Force exists only while the surfaces are in contact (`x > 0`).
 
-| 符号 | 含义 |
-|------|------|
-| k·x^α | 非线性弹簧：压得越深顶回来越用力。α = 1.5 来自球面接触的几何——压得越深、接触面越大、越难再压，所以不是普通弹簧的一次方 |
-| λ·x^α·ẋ | 撞击损耗（像捏橡皮泥发热）。乘了 x^α 意味着刚碰到和快分开时损耗趋近零，力的曲线平滑不跳变——这是它比"弹簧+普通阻尼"高明的地方 |
-| ẋ | 压深变化的速度：正在往里压还是正在弹开 |
+| Symbol | Meaning |
+|--------|---------|
+| k·x^α | A nonlinear spring: the deeper the compression, the harder it pushes back. α = 1.5 comes from the geometry of spherical contact—as compression grows, the contact area grows and further compression becomes harder, so the exponent is not the 1 used by an ordinary spring |
+| λ·x^α·ẋ | Impact loss (like heating modeling clay by squeezing it). Multiplication by x^α makes the loss approach zero at initial contact and just before separation, so the force curve is smooth and does not jump. This is the advantage over a simple “spring plus ordinary damper” |
+| ẋ | The rate at which compression depth changes: whether the surfaces are moving farther into each other or springing apart |
 
-**双向耦合**：
+**Two-way coupling**:
 
 ```
 mₛ·s̈ = −f          x = s − Σqₙ
 ```
 
-力让锤子减速反弹（左式），同时把桌面压弯（喂给 stage 1 的每个小球）；
-而压深 x = 锤子位置 − 桌面被压弯的位置——桌面弯了，压深就变了，力又跟着变。
+The force slows and rebounds the hammer (the equation on the left) while simultaneously bending the table by driving every small mass from Stage 1. The compression depth is `x = hammer position − displaced table surface`. When the table bends, the compression changes, which changes the force again.
 
-**三条求解路径**（都在 `core/impact.py`）：
+**Three solution paths** (all in `core/impact.py`):
 
-1. RK4 参考解：过采样率下积分（一次接触 ≥40 步），接触结束后模态自由衰减用解析解；
-2. audio-rate 隐式格式（K-method 思路）：44.1 kHz 下梯形法离散后，
-   这一时刻的力取决于压深、压深又取决于这一时刻的力（鸡生蛋，delay-free loop），
-   把 x 和 ẋ 都写成 f 的一次式后，每个采样解一个标量方程
-   `f = HC(P − G·f, P_d − G_d·f)`——未来 C++ 实时版就是这个形态；
-3. 开环 fallback：先算 striker 撞刚性墙的力脉冲，再当普通输入喂模态库。
+1. RK4 reference solution: integrate at an oversampled rate (at least 40 steps per contact), then use the analytical free-decay solution for the modes after contact ends;
+2. Audio-rate implicit scheme (in the spirit of the K-method): after trapezoidal discretization at 44.1 kHz, the force at the current instant depends on the compression, but the compression also depends on the force at that instant—a delay-free loop. After expressing both `x` and `ẋ` as linear functions of `f`, solve one scalar equation per sample: `f = HC(P − G·f, P_d − G_d·f)`. The future real-time C++ implementation will have this form;
+3. Open-loop fallback: first calculate the force pulse from a striker hitting a rigid wall, then feed it to the modal bank as an ordinary input.
 
-**接触时长估算（赫兹理论，α=1.5 无损耗情形）**：
+**Contact-duration estimate (Hertz theory, lossless case with α=1.5)**:
 
 ```
 τ_contact ≈ 2.87 · (m² / (k²·v))^(1/5)
 ```
 
-材料越硬（k 大）、撞得越快（v 大），接触越短；接触越短 → 力脉冲越"尖" →
-含更多高频——这就是"硬的东西听起来亮"的物理来源，也是 stage 3 验证图的理论线。
+The harder the material (larger `k`) and the faster the impact (larger `v`), the shorter the contact. A shorter contact produces a “sharper” force pulse containing more high-frequency energy. This is the physical origin of why hard objects sound bright, and it is the theoretical curve used in the Stage 3 validation figure.
 
-**实现中的真实发现**：轻共振体 + 强耗散时 striker 几乎不反弹，表面振荡会追上它
-造成 2~3 次 micro-bounce（`info["n_contacts"]`）；接触时长的单调趋势只在
-"轻锤打重共振体"区间成立（趋势 gate 用 modal mass 0.5 kg vs striker 8 g）。
+**A real behavior discovered during implementation**: with a light resonator and strong dissipation, the striker barely rebounds, and the vibrating surface can catch up with it, causing two or three micro-bounces (`info["n_contacts"]`). The monotonic contact-duration trend holds only in the “light hammer striking a heavy resonator” regime (the trend gate uses a modal mass of 0.5 kg versus a striker mass of 8 g).
 
-### 问答：撞击方的材质考虑了吗？（玻璃杯撞水泥地 / 玻璃杯撞玻璃杯 / 木头碰玻璃杯）
+### Q&A: Is the striker's material considered? (Glass cup on concrete / glass cup on glass / wood against a glass cup)
 
-现状是经典"锤-物"简化，两个物体角色不对称：被撞方有完整模态库（形状 + tanφ），
-撞击方只是质量块——**不会响**，它的材质只通过接触参数 k、α、λ 进入。
+The current model uses the classic asymmetric “hammer-object” simplification. The struck object has a complete modal bank (shape + tanφ), while the striker is only a point mass—it **does not ring**. Its material enters only through the contact parameters `k`, `α`, and `λ`.
 
-**一半已经考虑了——藏在 k 里**。接触刚度物理上是"这一对表面"的属性，
-赫兹理论：1/E* = (1−ν₁²)/E₁ + (1−ν₂²)/E₂，两个物体各贡献一项，**谁软谁主导**。
-毛毡槌 vs 铁槌敲同一口钟：钟的模态没变，变的是 k → 接触时间 → 脉冲钝/尖 →
-激起的模态多寡。所以"木头碰玻璃杯比杯碰杯闷"现有模型已能表达（k 取中等值）。
-杨氏模量参考：钢 200 GPa、玻璃 70、水泥 30、木 10、塑料 2、橡胶 0.01。
-另外"撞地板"场景中被撞方的响 = stage 5 ground layer，地板材质单独成层。
+**Half of the answer is already included—inside `k`.** Contact stiffness is physically a property of the pair of surfaces. In Hertz theory, `1/E* = (1−ν₁²)/E₁ + (1−ν₂²)/E₂`: each object contributes a term, and **the softer one dominates**. A felt mallet and an iron hammer striking the same bell do not change the bell's modes; they change `k`, which changes contact duration, pulse sharpness, and the number of modes excited. The current model can therefore already express why wood striking a glass cup sounds duller than one cup striking another by assigning an intermediate value of `k`. Reference Young's moduli: steel 200 GPa, glass 70, concrete 30, wood 10, plastic 2, rubber 0.01. In “object hitting floor” scenarios, the struck floor's sound is handled separately by the Stage 5 ground layer.
 
-**真正缺的：撞击方自己的振铃**。玻璃杯碰玻璃杯两只都响，现模型只响一只。两条补法：
+**What is genuinely missing is the striker's own ringing.** When two glass cups collide, both ring; the current model rings only one. There are two ways to add the missing sound:
 
-1. 廉价路（开环，游戏够用）：把 `info["force"]` 的力脉冲再喂给第二个物体的
-   模态库，两路相加。B 的表面运动不反馈回接触力，不严格，但"两个音色被同一
-   脉冲点亮"的主听感已具备；
-2. 严格路：striker 升级为"质量 + 自己的模态库"，x = (s + Σq_A) − Σq_B，
-   两边各收 ±f——只是 RK4 状态向量加长，框架不变。适合作论文扩展小节
-   （并论证实时插件为何可用开环近似）。
+1. Inexpensive approach (open-loop and sufficient for games): feed the force pulse in `info["force"]` into a second object's modal bank, then sum the two outputs. Object B's surface motion does not feed back into the contact force, so this is not exact, but it captures the main perceptual effect of “two timbres lit up by the same pulse”;
+2. Rigorous approach: upgrade the striker to “mass + its own modal bank,” with `x = (s + Σq_A) − Σq_B`, and apply `±f` to the two sides. This only lengthens the RK4 state vector; the framework remains the same. It would make a suitable thesis extension section, along with an argument for why the real-time plug-in can use the open-loop approximation.
 
-规划落点：k 做成材质对查表（E* 公式）；玻璃碰玻璃双响铃用开环法加补充 render。
+Planned implementation: make `k` a material-pair lookup based on the `E*` formula, and add a supplementary glass-on-glass dual-ring render using the open-loop method.
 
 ---
 
-## Stage 4a · 摩擦 / 滑动 — `core/friction.py`
+## Stage 4a · Friction / Sliding — `core/friction.py`
 
-**类比**：显微镜下桌面全是小山丘。推箱子滑过去 = 每秒撞过成千上万个小山丘，
-每次微小碰撞叠起来就是"沙——"的噪声。
+**Analogy**: Under a microscope, a tabletop is covered in tiny hills. Sliding a box across it means striking thousands of these hills every second. The sum of all those microscopic impacts becomes a “shhh” noise.
 
 ```
-响度 ∝ (v / v_ref)^1.2          截止频率 = 120 + 9000·v  (Hz)
+loudness ∝ (v / v_ref)^1.2          cutoff frequency = 120 + 9000·v  (Hz)
 ```
 
-滑得快 → 每秒撞的山丘多（更响），而且每次撞得更急促（更"尖"、含更多高频，
-所以更亮）。两条都由滑速 v 驱动；v 低于 1 cm/s 平滑淡出到静音。
-生成的噪声再喂给 stage 1 的模态库，带上"这个箱子"自己的共振音色。
-可选 stick-slip：用速率 ∝ 滑速的弛豫振荡器调制噪声 → 周期性 squeak。
+Faster sliding means hitting more hills per second (greater loudness), and each impact is more abrupt (sharper, with more high-frequency content, and therefore brighter). Both effects are driven by the sliding speed `v`; below 1 cm/s, the sound fades smoothly to silence. The generated noise is then fed into the Stage 1 modal bank so that it acquires the resonant timbre of “this particular box.” Optional stick-slip behavior modulates the noise with a relaxation oscillator whose rate is proportional to sliding speed, producing a periodic squeak.
 
-### 问答：截止频率 120 + 9000·v 这两个数是怎么来的？
+### Q&A: Where do the two numbers in the cutoff frequency `120 + 9000·v` come from?
 
-不是论文常数，是耳朵调的启发式参数，但各有物理含义：
+They are ear-tuned heuristic parameters, not constants from a paper, but each has a physical interpretation:
 
-**斜率 9000（Hz 每 m/s）= 表面粗糙度的化身**。滑过间距 λ 的微凸起、速度 v，
-磕碰基频 f = v/λ——频率随速度线性上升，这是"cutoff ∝ v"的物理依据。
-反解 λ = 1/9000 ≈ 0.11 mm，即隐含假设"表面每 0.11 毫米一个微凸起"，
-普通桌面/木面的粗糙度量级。`cut_per_v` 本质是表面材质参数：
-粗颗粒表面调低（隆隆），抛光面调高（咝咝）。
+**The slope 9000 (Hz per m/s) represents surface roughness.** Moving at speed `v` over asperities spaced by distance `λ` produces impacts at the fundamental frequency `f = v/λ`. Frequency therefore increases linearly with speed, which is the physical basis for `cutoff ∝ v`. Solving backward gives `λ = 1/9000 ≈ 0.11 mm`, implicitly assuming one small surface bump every 0.11 millimeters—roughly the scale of an ordinary tabletop or wood surface. `cut_per_v` is fundamentally a surface-material parameter: set it lower for a coarse, rumbling surface and higher for a polished, hissing surface.
 
-**底数 120 Hz = 数值兜底 + 听感兜底**。没有下限时 v→0 会让单极点系数
-a = exp(−2π·cutoff/fs) → 1，滤波器变成无限记忆的积分器拖尾；听感上将停未停
-应是低沉"咕噜"而非频宽归零。具体 120 vs 80/200 纯属耳朵调。
+**The 120 Hz base value is both a numerical and perceptual safety floor.** Without a lower bound, `v→0` would make the one-pole coefficient `a = exp(−2π·cutoff/fs) → 1`, turning the filter into an integrator with an infinitely long tail. Perceptually, an object about to stop should produce a low rumble rather than collapse to zero bandwidth. The choice of 120 rather than 80 or 200 is purely ear-tuned.
 
-两个值即 `friction_exciter()` 的参数 `cut_min` / `cut_per_v`，设计意图是
-每种表面一组值（与 tanφ 管材质同思路），上限钳在 0.45·fs 防超奈奎斯特。
+The two values are the `cut_min` and `cut_per_v` parameters of `friction_exciter()`. The design intent is to provide one pair of values per surface, in the same way that tanφ describes material. The upper limit is clamped to `0.45·fs` to stay below Nyquist.
 
 ---
 
-## Stage 4b · 颗粒层（碎石/泥土/草，PhISEM v2）— `core/aggregate.py`
+## Stage 4b · Aggregate Layer (Gravel/Dirt/Grass, PhISEM v2) — `core/aggregate.py`
 
-**类比**：踩一脚碎石堆 = 一大把石子在短时间内互相磕碰。每次磕碰什么时候发生、
-多大声、什么音高，全是随机的。
-
-```
-P(这一格有磕碰) = density / fs      响度 ~ Exp(1)      音高 ~ LogUniform(lo, hi)
-```
-
-每个采样格掷一次骰子决定"有没有石子磕上"（密度越大越频繁）；磕碰响度按指数分布
-抽——小声的多、偶尔一声大的，跟真实一致；**v2 的关键改动**：每颗石子的音高也
-随机抽（真石头颗颗大小不同）。v1 让所有石子过同一个固定谐振滤波器，几百个同音
-"叮"叠出来就像有一张鼓皮在共鸣——听感上的"雨棚/鼓面"就是这么来的。
+**Analogy**: Stepping on a pile of gravel makes many stones collide with one another over a short time. The timing, loudness, and pitch of every collision are random.
 
 ```
-bed = 带通白噪声 × √(平滑能量包络)      out = (1−mix)·颗粒 + mix·bed
+P(a collision in this sample) = density / fs      loudness ~ Exp(1)      pitch ~ LogUniform(lo, hi)
 ```
 
-草不一样：草叶摩擦没有任何"叮"，本质是海量微小摩擦融成的连续沙沙声。
-做法就是拿高频白噪声，用颗粒能量的起伏去调它的音量（随机幅度调制）。
-grass preset 的 mix = 0.8：八成是这种噪声、两成是细碎脆响。
+At every sample, a die roll decides whether two stones collide—the greater the density, the more frequent the collisions. Collision amplitudes are drawn from an exponential distribution: many quiet events and an occasional loud one, as in reality. The **key change in v2** is that each grain's pitch is also drawn randomly because real stones have different sizes. In v1, every grain passed through the same fixed resonant filter. Hundreds of same-pitch “dings” combined into something that sounded like a resonating drumhead; that is the source of the perceptual “awning/drum-skin” quality.
+
+```
+bed = band-passed white noise × √(smoothed energy envelope)      out = (1−mix)·grains + mix·bed
+```
+
+Grass is different: rubbing grass blades do not produce “dings.” The sound is fundamentally a continuous rustle formed from a vast number of microscopic friction events. The model takes high-frequency white noise and modulates its amplitude with fluctuations in grain energy—random amplitude modulation. The grass preset uses `mix = 0.8`: 80% of the result is this noise and 20% is fine, brittle impacts.
 
 ---
 
-## Stage 5 · 地面层（简化 Qu & James 2019）— `core/ground.py`
+## Stage 5 · Ground Layer (Simplified Qu & James 2019) — `core/ground.py`
 
-**类比**：同一个杯子，掉在薄木地板上比掉在实心水泥上多一声低沉的"咚"——
-那是整块地板在响，不是杯子。
+**Analogy**: The same cup falling on a thin wooden floor produces an extra low “thud” compared with falling on solid concrete. That is the entire floor panel sounding, not the cup.
 
 ```
-冲量面积 = m·v  →  几个 55–240 Hz 重阻尼模态   +   低通噪声 × e^(−t/0.012)
+impulse area = m·v  →  several heavily damped 55–240 Hz modes   +   low-pass noise × e^(−t/0.012)
 ```
 
-地板 = 一块又大又重的板子：共振频率很低（大物体音低），但能量很快被传走
-（大板子把振动散出去），所以"咚"低沉且短。多重的咚由砸下来的动量 m·v 决定。
-再叠 12 毫秒的噪声闪一下，模拟接触瞬间的"啪嗒"细节（论文里的加速度噪声）。
-省略了什么（半空间弹性求解、辐射方向性、精细力耦合）见 `core/ground.py` docstring。
+The floor is a large, heavy plate: its resonant frequencies are low because large objects have low pitches, but its energy travels away quickly as the large plate disperses vibration. The result is a low, short “thud.” Its weight is determined by the falling momentum `m·v`. A 12-millisecond flash of noise is added to simulate the fine “clack” detail at the instant of contact—the acceleration noise described in the paper. See the docstring in `core/ground.py` for the omitted components, including the elastic half-space solution, radiation directivity, and detailed force coupling.
 
 ---
 
-## Stage 6 · 模拟物理轨迹 — `sim/trajectories.py`
+## Stage 6 · Simulated Physical Trajectories — `sim/trajectories.py`
 
-**类比**：不用游戏引擎，直接用高中物理算出"球什么时候落地、落地时多快"，
-把这串数字喂给前面所有模型。
+**Analogy**: Instead of using a game engine, apply high-school physics directly to calculate when a ball lands and how fast it is moving at impact, then feed this sequence of numbers into all the preceding models.
 
-**弹跳球**：
+**Bouncing ball**:
 
 ```
 v₀ = √(2·g·h₀)        v_{k+1} = ε·v_k  (ε = 0.72)        Δt_k = 2·v_k / g
 ```
 
-自由落体给出第一次落地速度；每次反弹只剩 72% 速度（恢复系数 ε）；弹起再落下的
-时间 = 2v/g，速度越来越小、间隔越来越短——"越弹越快、越弹越轻"的节奏来源。
-每次落地调一次 stage 3 冲击 + stage 5 地面层。
+Free fall gives the first impact speed. After each bounce, only 72% of the speed remains (coefficient of restitution `ε`). The time to rise and fall again is `2v/g`. The speed decreases and the intervals become shorter, producing the familiar rhythm of “faster and quieter with every bounce.” Each landing triggers one Stage 3 impact plus the Stage 5 ground layer.
 
-**滑块**：
+**Sliding box**:
 
 ```
 v(t) = v₀ − μ·g·t
 ```
 
-被摩擦力匀减速到停（μ 是摩擦系数），速度曲线直接喂 stage 4a——滑动声自然地
-由响变轻、由亮变闷，最后静音。
+Friction decelerates the box uniformly until it stops (`μ` is the coefficient of friction). Its velocity curve drives Stage 4a directly, so the sliding sound naturally becomes quieter and duller before fading to silence.
 
-**翻滚**：泊松簇发的随机（时刻，速度）事件流，压测重叠发声。
+**Tumbling**: a random Poisson-burst event stream of `(time, velocity)` pairs used to stress-test overlapping voices.

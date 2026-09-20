@@ -1,54 +1,29 @@
-# 相关工作：体量相当的双共振体碰撞（two-body impact）
+# Related Work: Collisions Between Two Resonant Bodies of Comparable Scale (Two-Body Impact)
 
-问题：当前 stage 3 是"锤-物"简化（striker 不响）。玻璃杯碰玻璃杯这类
-"两个体量相当、都会响的物体互撞"有哪些已有研究？
+Question: The current Stage 3 uses a “hammer-object” simplification in which the striker does not ring. What prior research covers collisions such as one glass cup striking another, where the two objects have comparable scale and both produce sound?
 
-结论：有成熟研究，分两条传统。图形学阵营默认"每个物体都有自己的模态库、
-接触力同时激励双方（单向/开环）"；声学阵营把耦合求解做得更严格但撞击方
-通常简化。我们的"开环双库"方案即图形学标准做法，有直接引用可用。
+Conclusion: This is a mature research area with two main traditions. Graphics research generally assumes that every object has its own modal bank and that the contact force excites both objects (one-way/open-loop coupling). Acoustics research solves the coupling more rigorously but often simplifies the striker. Our “open-loop dual-bank” approach is the standard graphics method and has directly citable precedent.
 
-标注：✔ = 2026-08-06 在 DBLP 在线核对过出处；◇ = 凭模型知识，引用前请点开确认。
+Notation: ✔ = bibliographic details verified online in DBLP on 2026-08-06; ◇ = based on model knowledge and should be confirmed by opening the source before citation.
 
-## A. 图形学 / 动画阵营（多物体、都响、开环激励）
+## A. Graphics / Animation Tradition (Multiple Objects, All Ringing, Open-Loop Excitation)
 
-- ✔ van den Doel, Kry & Pai, "FoleyAutomatic: physically-based sound effects
-  for interactive simulation and animation", SIGGRAPH 2001.
-  接触声框架奠基作：场景内每个物体都是模态模型，物理引擎接触力分别激励
-  各自模态库——"两个都响"是默认设定。含 impact/rolling/sliding。
-- ✔ O'Brien, Shen & Gatchalian, "Synthesizing sounds from rigid-body
-  simulations", SCA 2002. 从网格自动提取每个刚体的模态，碰撞冲量同时喂
-  双方。即本项目"开环廉价路"的已发表标准形态。
-- ✔ Raghuvanshi & Lin, "Interactive sound synthesis for large scale
-  environments", I3D 2006. 数百个模态物体互撞的实时预算方案（模式裁剪、
-  质量分级）——写游戏预算章节的直接引用。
-- ✔ Zheng & James, "Toward high-quality modal contact sound", SIGGRAPH 2011.
-  与本问题最贴：指出朴素冲量激励在共振体撞共振体时失真，引入接触阻尼
-  （持续接触时互相消音）、微碰撞序列与多点摩擦接触的耦合处理。
-  杯叠杯/杯碰杯的失真机理出处；也接上我们观察到的 micro-bounce。
-- ✔ Chadwick, Zheng & James, "Precomputed acceleration noise for improved
-  rigid-body sound", SIGGRAPH 2012. 碰撞除振铃外的"加速度噪声"（刚体整体
-  加速推空气）——ground layer 噪声 burst 的理论出处。
-- ✔ Ante Qu, "Computer methods for collision processing: from sound to
-  topology", Stanford PhD thesis 2021. Qu & James ground sound 的完整版。
+- ✔ van den Doel, Kry & Pai, “FoleyAutomatic: Physically-based sound effects for interactive simulation and animation,” SIGGRAPH 2001. A foundational contact-sound framework: every object in the scene is a modal model, and contact forces from the physics engine excite each object's modal bank separately. Having “both objects ring” is the default. Covers impact, rolling, and sliding.
+- ✔ O'Brien, Shen & Gatchalian, “Synthesizing sounds from rigid-body simulations,” SCA 2002. Automatically extracts modes for each rigid body from its mesh and feeds collision impulses to both objects. This is the published standard form of the project's inexpensive “open-loop approach.”
+- ✔ Raghuvanshi & Lin, “Interactive sound synthesis for large scale environments,” I3D 2006. A real-time budgeting method for collisions among hundreds of modal objects, using mode culling and mass-based level of detail. A direct citation for the game-performance budgeting section.
+- ✔ Zheng & James, “Toward high-quality modal contact sound,” SIGGRAPH 2011. The work most directly relevant to this question. It shows how naive impulse excitation becomes inaccurate when one resonant body strikes another, and introduces coupled handling of contact damping (mutual suppression during sustained contact), micro-collision sequences, and multi-point frictional contact. It provides a source for the distortion mechanism in cup-on-cup collisions and also connects to our observed micro-bounces.
+- ✔ Chadwick, Zheng & James, “Precomputed acceleration noise for improved rigid-body sound,” SIGGRAPH 2012. Covers the “acceleration noise” beyond ringing during a collision, caused when whole-body acceleration pushes air. This provides a theoretical source for the ground layer's noise burst.
+- ✔ Ante Qu, “Computer methods for collision processing: from sound to topology,” Stanford PhD thesis, 2021. The complete treatment of the Qu & James ground-sound work.
 
-## B. 声学 / 物理建模阵营（耦合严格、撞击方常简化）
+## B. Acoustics / Physical-Modeling Tradition (Rigorous Coupling, Often with a Simplified Striker)
 
-- ◇ Rocchesso & Fontana (eds.), "The Sounding Object", 2003
-  （soundobject.org 免费 PDF）。Avanzini 模型的全书版；impact 章节给出
-  两个模态物体互撞的方程形式（各自模态展开 + 共享接触力）。SDT 实现的是
-  质量块撞模态体，但理论框架是双模态体的。
-- ◇ Papetti, Avanzini & Rocchesso, "Numerical methods for a nonlinear
-  impact model", IEEE TASLP 2011. K-method 等离散化系统比较——本项目
-  implicit 积分器的直系文献；扩展到双模态体数值方案不变。
-- ◇ Chaigne & Doutaut, 木琴敲击建模, JASA 1997. 声学界经典双体耦合：
-  琴槌为"质量+非线性弹簧"（最简单的会变形撞击方）。
-- ◇ 钢琴槌-弦文献（Hall；Stulov 迟滞槌模型）：撞击方有内部动力学的极端例子。
+- ◇ Rocchesso & Fontana (eds.), “The Sounding Object,” 2003 (free PDF at soundobject.org). The book-length presentation of the Avanzini model. The impact chapter gives the equation form for two colliding modal objects: a separate modal expansion for each object plus a shared contact force. SDT implements a point mass striking a modal body, but the theoretical framework supports two modal bodies.
+- ◇ Papetti, Avanzini & Rocchesso, “Numerical methods for a nonlinear impact model,” IEEE TASLP 2011. A systematic comparison of the K-method and other discretization schemes. This is the direct methodological source for the project's implicit integrator; the numerical scheme is unchanged when extended to two modal bodies.
+- ◇ Chaigne & Doutaut, xylophone-strike modeling, JASA 1997. A classic acoustics treatment of two-body coupling in which the mallet is modeled as “mass + nonlinear spring,” the simplest form of a deformable striker.
+- ◇ Piano hammer-string literature (Hall; Stulov hysteretic hammer model): an extreme example in which the striker has its own internal dynamics.
 
-## 对本项目的三个落点
+## Three Direct Applications to This Project
 
-1. 开环双库法有靠山（O'Brien 2002 / Raghuvanshi 2006），论文里直接引用
-   论证近似合理性；
-2. 失真边界引 Zheng & James 2011：持续接触的互相阻尼、微碰撞序列是
-   朴素做法破功的场景；
-3. 体量相当时接触时长用约化质量修正：m_eff = m₁m₂/(m₁+m₂) 替入
-   `hertz_contact_time()` 即可。
+1. The open-loop dual-bank method has strong precedent in O'Brien 2002 and Raghuvanshi 2006. Cite these sources directly in the thesis to justify the approximation;
+2. Cite Zheng & James 2011 for the limits of the approximation: mutual damping during sustained contact and micro-collision sequences are cases in which the naive method breaks down;
+3. For bodies of comparable scale, correct the contact duration using the reduced mass: substitute `m_eff = m₁m₂/(m₁+m₂)` into `hertz_contact_time()`.
