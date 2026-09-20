@@ -3,9 +3,9 @@
 Offline prototyping phase for real-time procedural contact audio (impact,
 sliding, debris, ground). Verifies the math from the reference papers before
 the C++/plugin phase, renders WAVs for listening, and produces thesis figures.
-Spec: `procedural_audio_python_prototype_spec.md` (Downloads).
+Spec: `procedural_audio_python_prototype_spec.md`.
 
-## Environment (verified 2026-08-04)
+## Environment 
 
 Conda env `procaudio` (python 3.11 + numpy/scipy/matplotlib via conda,
 soundfile via pip):
@@ -29,7 +29,7 @@ Run from `D:\ProceduralAudio` (repo root). Each stage writes WAVs to
 & C:\ProgramData\miniconda3\envs\procaudio\python.exe -m proto.stages.stage6_full_pipeline
 ```
 
-Status (all run on 2026-08-04): **stage 1–6 all PASS**.
+Status (all run in 2026-08): **stage 1–6 all PASS**.
 
 | stage | gate | result |
 |-------|------|--------|
