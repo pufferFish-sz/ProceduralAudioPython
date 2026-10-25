@@ -15,6 +15,7 @@ FS = 44100
 PROTO_DIR = Path(__file__).resolve().parent
 RENDER_DIR = PROTO_DIR / "renders"
 FIG_DIR = PROTO_DIR / "figures"
+SCENE_DIR = RENDER_DIR / "scenes"
 DOCS_DIR = PROTO_DIR / "docs"
 
 for _d in (RENDER_DIR, FIG_DIR, DOCS_DIR):

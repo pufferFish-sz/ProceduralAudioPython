@@ -40,7 +40,7 @@ simulated surfaces, (c) paired comparison against recorded samples of the
 same surface (which sounds more realistic / are they the same surface).
 
 **Stimuli construction (mapped to this codebase).**
-- Impact chain: `stage3` renders (velocity/stiffness variants).
+- Impact chain: `stage2_object_impact` renders (velocity/stiffness variants).
 - Aggregate chain: `core/aggregate.AGGREGATE_PRESETS` driven by the same
   energy envelope per surface so only the surface model varies.
 - Matched recordings from `recordings/` (same interaction, comparable

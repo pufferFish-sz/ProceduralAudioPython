@@ -32,10 +32,36 @@ MATERIALS: dict[str, float] = {
     "wood":    0.012,
     "plastic": 0.05,
     "rubber":  0.15,
+    # granite-like stone; ear-plausible preset (lithophones ring for a while)
+    "stone":   0.004,
 }
 
-# A few "shapes": mode frequency sets + relative gains. Frequencies define
-# perceived size/geometry; they stay fixed while material (tan_phi) swaps.
+# Elastic constants per material: Young's modulus E (Pa), density rho
+# (kg/m^3), Poisson ratio nu. Rounded engineering reference values (steel,
+# soda-lime glass, hardwood along the grain, ABS-type plastic, natural
+# rubber), for intuition and order-of-magnitude pitch/hardness -- not
+# citation-grade measurements. Used by core/shapes.py (E/rho -> mode
+# frequencies) and core/impact.hertz_stiffness (E, nu -> contact k).
+# Wood is strongly anisotropic; the along-grain E sets pitch, while contact
+# (Hertz indentation) uses E_contact: impacts load wood ACROSS the grain,
+# ~10x softer (hardwood radial/tangential E ~0.5-1.5 GPa, rounded).
+PHYSICAL: dict[str, dict] = {
+    "metal":   dict(E=200e9, rho=7850.0, nu=0.29),
+    "glass":   dict(E=70e9,  rho=2500.0, nu=0.22),
+    "wood":    dict(E=11e9,  rho=650.0,  nu=0.30, E_contact=1.0e9),
+    "plastic": dict(E=2.5e9, rho=1100.0, nu=0.37),
+    "rubber":  dict(E=0.01e9, rho=1100.0, nu=0.49),
+    "stone":   dict(E=50e9, rho=2700.0, nu=0.25),
+    # surface-only entry (floors): no tan_phi preset, never a resonator here
+    "concrete": dict(E=30e9, rho=2400.0, nu=0.20),
+}
+
+# Hand-authored "shapes": mode frequency sets + relative gains. These are NOT
+# derived from any geometry -- they are ear-plausible partial sets chosen
+# for listening/decay-fit tests (none matches the ratio series of a bar,
+# plate or shell). Frequencies stay fixed while material (tan_phi) swaps.
+# For mode sets derived from real geometry + material constants, see
+# core/shapes.py.
 SHAPES: dict[str, dict] = {
     # generic small struck object, spread partials, well separated (good for
     # decay-fit verification)

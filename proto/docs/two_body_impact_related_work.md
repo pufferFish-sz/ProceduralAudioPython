@@ -1,6 +1,6 @@
 # Related Work: Collisions Between Two Resonant Bodies of Comparable Scale (Two-Body Impact)
 
-Question: The current Stage 3 uses a “hammer-object” simplification in which the striker does not ring. What prior research covers collisions such as one glass cup striking another, where the two objects have comparable scale and both produce sound?
+Question: The current Stage 2B (impact) uses a “hammer-object” simplification in which the striker does not ring. What prior research covers collisions such as one glass cup striking another, where the two objects have comparable scale and both produce sound?
 
 Conclusion: This is a mature research area with two main traditions. Graphics research generally assumes that every object has its own modal bank and that the contact force excites both objects (one-way/open-loop coupling). Acoustics research solves the coupling more rigorously but often simplifies the striker. Our “open-loop dual-bank” approach is the standard graphics method and has directly citable precedent.
 

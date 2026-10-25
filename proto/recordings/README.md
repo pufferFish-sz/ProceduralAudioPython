@@ -6,7 +6,7 @@ Put real contact-sound recordings here for spectrogram comparison
 - wood block tap
 - ceramic mug tap
 - metal pot tap
-- object dropped on floor  (name it `*floor*.wav` — stage5 auto-includes it)
+- object dropped on floor  (name it `*floor*.wav` — stage4 auto-includes it)
 - object dragged on table
 - gravel scrape
 

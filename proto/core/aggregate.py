@@ -20,6 +20,20 @@ v2 changes (after listening tests on the v1 renders):
   (grass) are mostly THIS -- stochastic AM rustle, no audible resonance --
   per the observation that grass reads better as high-frequency noise.
 - per-surface balance via bed_mix (0 = all discrete grains, 1 = all rustle).
+
+v3 changes (grass only; gravel/dirt renders are bit-identical to v2):
+- the v2 grass preset was 80% stationary bandpassed noise (2.8-11 kHz) under
+  a slow envelope -- a smooth hiss swell ("shhh"/steam), no texture. Its
+  spectrogram is a uniform wash with no visible events.
+- grass is now a LAYERED preset (`layers`): (a) "swish" = overlapping
+  noise grains 10-60 ms long with a soft attack, each with its own band in
+  0.7-6 kHz (blades brushing past each other), (b) "crackle" = sparse
+  sub-millisecond clicks (stems snapping / dry blades), (c) a small
+  low-mid bed for continuity. Grain amplitudes are lognormal (heavy-tailed)
+  so a few loud swishes/snaps stand out -- that irregularity is what makes
+  it read as material rather than noise.
+- new grain options used by (a)/(b): grain_attack (soft onset) and
+  amp_sigma (lognormal amplitudes instead of exponential).
 """
 from __future__ import annotations
 
@@ -42,6 +56,8 @@ def aggregate_exciter(density_hz, duration: float, fs: int,
                       bed_mix: float = 0.15,
                       bed_band: tuple[float, float] = (1500.0, 6000.0),
                       bed_smooth: float = 0.008,
+                      grain_attack: float | None = None,
+                      amp_sigma: float | None = None,
                       energy=1.0, seed: int | None = 1) -> np.ndarray:
     """Poisson-triggered grain stream with per-grain randomized resonance.
 
@@ -52,6 +68,11 @@ def aggregate_exciter(density_hz, duration: float, fs: int,
     bed_mix    : 0..1 -- blend of continuous AM-noise bed vs discrete grains.
     bed_band   : bandpass (lo, hi) Hz for the bed noise.
     bed_smooth : smoothing time constant (s) for the bed's AM envelope.
+    grain_attack: None = instant onset; else attack time constant as a
+                 FRACTION of each grain's decay (envelope
+                 (1 - exp(-t/ta)) * exp(-t/td), ta = grain_attack * td).
+    amp_sigma  : None = Exp(1) grain amplitudes; else lognormal(0, sigma),
+                 clipped at 6 sigma (heavier tail -> a few events stand out).
     energy     : scalar or per-sample array scaling bump amplitude.
     """
     n = int(round(duration * fs))
@@ -61,7 +82,12 @@ def aggregate_exciter(density_hz, duration: float, fs: int,
 
     p = np.clip(dens / fs, 0.0, 1.0)
     event_idx = np.nonzero(rng.random(n) < p)[0]
-    amps = rng.exponential(1.0, len(event_idx)) * en[event_idx]
+    if amp_sigma is None:
+        raw = rng.exponential(1.0, len(event_idx))
+    else:
+        raw = np.minimum(rng.lognormal(0.0, amp_sigma, len(event_idx)),
+                         np.exp(6.0 * amp_sigma))
+    amps = raw * en[event_idx]
 
     # ---- discrete grains: individual noise bursts, randomized resonance ----
     grains = np.zeros(n)
@@ -75,7 +101,11 @@ def aggregate_exciter(density_hz, duration: float, fs: int,
             if L <= 0:
                 continue
             t = np.arange(L) / fs
-            burst = rng.standard_normal(L) * np.exp(-t / dec) * amp
+            shape = np.exp(-t / dec)
+            if grain_attack is not None:
+                shape *= 1.0 - np.exp(-t / (grain_attack * dec))
+                shape /= shape.max() or 1.0
+            burst = rng.standard_normal(L) * shape * amp
             b, a = _biquad_bandpass(min(fc, 0.45 * fs), q, fs)
             grains[i0:i0 + L] += lfilter(b, a, burst)
 
@@ -108,8 +138,47 @@ AGGREGATE_PRESETS: dict[str, dict] = {
     "dirt":   dict(density_hz=350.0, grain_fc=(250.0, 1300.0),
                    grain_q=(0.8, 1.6), grain_decay=(0.0015, 0.004),
                    bed_mix=0.25, bed_band=(300.0, 2000.0)),
-    # vegetation: mostly high-frequency AM noise rustle + tiny crackles
-    "grass":  dict(density_hz=800.0, grain_fc=(3000.0, 9000.0),
-                   grain_q=(0.8, 1.8), grain_decay=(0.0008, 0.002),
-                   bed_mix=0.8, bed_band=(2800.0, 11000.0)),
+    # vegetation (v3, layered): swishing blades + sparse stem snaps + thin bed.
+    # Each layer: aggregate_exciter kwargs + "gain" (relative peak level).
+    "grass": dict(layers=[
+        # swish: long, soft-onset, broad noise grains, own band per grain
+        dict(gain=1.0, density_hz=60.0, grain_fc=(700.0, 6000.0),
+             grain_q=(0.6, 1.4), grain_decay=(0.010, 0.060),
+             grain_attack=0.35, amp_sigma=1.2, bed_mix=0.0),
+        # crackle: sparse sub-ms clicks, bright, very uneven levels
+        dict(gain=0.55, density_hz=45.0, grain_fc=(2500.0, 9000.0),
+             grain_q=(0.7, 1.5), grain_decay=(0.0002, 0.0009),
+             amp_sigma=1.3, bed_mix=0.0),
+        # bed: low-mid continuity only, so gaps between swishes aren't dead
+        dict(gain=0.10, density_hz=400.0, bed_mix=1.0,
+             bed_band=(900.0, 4500.0), bed_smooth=0.03),
+    ]),
 }
+
+# v2 grass kept for A/B listening against v3
+AGGREGATE_PRESETS_V2_GRASS = dict(density_hz=800.0, grain_fc=(3000.0, 9000.0),
+                                  grain_q=(0.8, 1.8),
+                                  grain_decay=(0.0008, 0.002),
+                                  bed_mix=0.8, bed_band=(2800.0, 11000.0))
+
+
+def render_aggregate(preset: str | dict, envelope: np.ndarray, fs: int,
+                     seed: int = 1) -> np.ndarray:
+    """Render a surface preset driven by a 0..1 control envelope (per sample).
+
+    The envelope scales both grain density and grain energy, so louder
+    contact = more AND stronger micro-collisions. Layered presets sum their
+    layers (each normalized by aggregate_exciter) with per-layer gains.
+    """
+    p = AGGREGATE_PRESETS[preset] if isinstance(preset, str) else preset
+    dur = len(envelope) / fs
+    layers = p["layers"] if "layers" in p else [dict(p, gain=1.0)]
+    out = np.zeros(len(envelope))
+    for i, layer in enumerate(layers):
+        kw = dict(layer)
+        gain = kw.pop("gain")
+        dens = kw.pop("density_hz")
+        y = aggregate_exciter(density_hz=dens * envelope, duration=dur, fs=fs,
+                              energy=envelope, seed=seed + i, **kw)
+        out[:len(y)] += gain * y
+    return out

@@ -36,7 +36,7 @@ q̈ₙ + 2·dₙ·q̇ₙ + ωₙ²·qₙ = f(t) / mₙ
 | ωₙ | The oscillation rate set by the spring stiffness: the pitch of this mode. ω = 2πf |
 | dₙ | The amount of damping: how long the sound rings. A larger d makes the sound disappear faster, with amplitude shrinking as e^(−d·t) |
 | mₙ | The mass, or inertia. The heavier it is, the less it moves under the same force |
-| f(t) | The external striking force as it changes over time. Stage 3 calculates the shape of this force |
+| f(t) | The external striking force as it changes over time. Stage 2B calculates the shape of this force |
 
 **Digital implementation (impulse-invariant discretization)**:
 
@@ -53,7 +53,7 @@ A computer cannot solve the equation continuously, it can only record one value 
 
 ---
 
-## Stage 2 · Material = One Number (`tanφ`) — `core/materials.py`
+## Stage 2A · Material = One Number (`tanφ`) — `core/materials.py`
 
 **Analogy**: Tap a glass and it rings for a long time; tap rubber and the sound dies immediately. The main difference is not pitch but how quickly the sound decays. Klatzky, Pai & Krotkov [3] found that decay contributed more strongly than frequency to material judgments, while also cautioning that both variables mattered and interacted in categorization.
 
@@ -88,11 +88,11 @@ For a numerical example, consider the same 5000 Hz mode: metal with tanφ=0.0002
 
 **Where the name tanφ comes from**: when a lossy material is stretched periodically, its strain lags behind its stress by a phase angle φ (0° for a purely elastic material, 90° for a purely viscous one). The area of the stress-strain hysteresis loop equals the energy converted to heat per cycle and is proportional to tanφ, so tanφ is naturally a measure of “loss per cycle.”
 
-**A common source of confusion**: a metal's high frequencies are determined by stiffness and geometry (`f ∝ √(E/ρ) × shape factor`), not by loss. A large bell is also metal; it has a low frequency but still rings for a long time. Stiffness (energy storage) and internal friction (energy leakage) are independent properties. Stage 2 relies on exactly this separation: the frequency set controls shape, while tanφ independently controls material.
+**A common source of confusion**: a metal's high frequencies are determined by stiffness and geometry (`f ∝ √(E/ρ) × shape factor`), not by loss. A large bell is also metal; it has a low frequency but still rings for a long time. Stiffness (energy storage) and internal friction (energy leakage) are independent properties. Stage 2A relies on exactly this separation: the frequency set controls shape, while tanφ independently controls material.
 
 ---
 
-## Stage 3 · Contact Force (Hunt–Crossley) — `core/impact.py`
+## Stage 2B · Contact Force (Hunt–Crossley) — `core/impact.py`
 
 **Analogy**: When a hammer strikes a table, the impact is not a single instantaneous “click”; it is a short process of compressing the surfaces and then releasing them. A hard ping-pong ball has a short, sharp contact, while a soft rubber ball remains in contact longer and sounds duller.
 
@@ -141,7 +141,7 @@ k = (4/3)·E*·√R_eff
 
 **Implementation note.** `hertz_contact_time()` currently evaluates `2.87·(m²/(k²v))^(1/5)`. Because its argument named `k` is the force-law coefficient rather than `E*√R_eff`, this is an approximate timestep estimator, not the exact algebraic conversion shown above. It does not determine the rendered force or reported contact time; RK4 measures those from the simulated compression history.
 
-The harder the material (larger `k`) and the faster the impact (larger `v`), the shorter the contact. A shorter contact produces a “sharper” force pulse containing more high-frequency energy. This is the physical origin of why hard objects sound bright, and it is the theoretical curve used in the Stage 3 validation figure.
+The harder the material (larger `k`) and the faster the impact (larger `v`), the shorter the contact. A shorter contact produces a “sharper” force pulse containing more high-frequency energy. This is the physical origin of why hard objects sound bright, and it is the theoretical curve used in the Stage 2B validation figure.
 
 **A real behavior discovered during implementation**: with a light resonator and strong dissipation, the striker barely rebounds, and the vibrating surface can catch up with it, causing two or three micro-bounces (`info["n_contacts"]`). The monotonic contact-duration trend holds only in the “light hammer striking a heavy resonator” regime (the trend gate uses a modal mass of 0.5 kg versus a striker mass of 8 g).
 
@@ -157,7 +157,7 @@ The current model uses the classic asymmetric “hammer-object” simplification
 
 **Formula provenance — Standard Hertz mechanics.** This effective-modulus relation is the conventional two-body Hertz reduction and is also used by Chadwick, Zheng & James [8, Sec. 3]. Each object contributes a term, so **the softer one dominates**.
 
-A felt mallet and an iron hammer striking the same bell do not change the bell's modes; they change `k`, which changes contact duration, pulse sharpness, and the number of modes excited. The current model can therefore already express why wood striking a glass cup sounds duller than one cup striking another by assigning an intermediate value of `k`. Rounded engineering reference values used for intuition—not citation-grade material measurements—are: steel 200 GPa, glass 70 GPa, concrete 30 GPa, wood 10 GPa, plastic 2 GPa, and rubber 0.01 GPa. In “object hitting floor” scenarios, the struck floor's sound is handled separately by the Stage 5 ground layer.
+A felt mallet and an iron hammer striking the same bell do not change the bell's modes; they change `k`, which changes contact duration, pulse sharpness, and the number of modes excited. The current model can therefore already express why wood striking a glass cup sounds duller than one cup striking another by assigning an intermediate value of `k`. Rounded engineering reference values used for intuition—not citation-grade material measurements—are: steel 200 GPa, glass 70 GPa, concrete 30 GPa, wood 10 GPa, plastic 2 GPa, and rubber 0.01 GPa. In “object hitting floor” scenarios, the struck floor's sound is handled separately by the Stage 4 ground layer.
 
 **What is genuinely missing is the striker's own ringing.** When two glass cups collide, both ring; the current model rings only one. There are two ways to add the missing sound:
 
@@ -168,7 +168,38 @@ Planned implementation: make `k` a material-pair lookup based on the `E*` formul
 
 ---
 
-## Stage 4a · Friction / Sliding — `core/friction.py`
+## Stage 2C · Shapes from Geometry, Hardness from Materials — `core/shapes.py`, `impact.hertz_stiffness`
+
+**Why this exists**: the mode sets in `materials.SHAPES` are hand-authored partial lists. They are not derived from any 3D shape. Stage 2C replaces them, for simple primitives, with frequencies computed from dimensions and the material's elastic constants, and computes the contact stiffness `k` from the two materials that touch.
+
+**Slender bar / rod / pipe (free-free Euler–Bernoulli beam):**
+
+```
+fₙ = (βₙL)² / (2π·L²) · √(E·I / (ρ·A))        βₙL = 4.730, 7.853, 10.996, …   (ratios 1 : 2.757 : 5.404 : 8.933)
+I/A = t²/12 (rectangular, thickness t)        I/A = (Rₒ² + Rᵢ²)/4 (tube; Rᵢ = 0 is a solid rod)
+```
+
+**Formula provenance — Standard mechanics.** Textbook free-free beam theory (e.g. Fletcher & Rossing, *The Physics of Musical Instruments*, ch. 2). Valid when the length is much greater than the cross-section.
+
+**Hollow vs solid.** For the same outer radius a pipe has a larger `I/A` than a rod, so its bending modes are *higher* (up to √2 ≈ +6 semitones for a thin wall) and its mass is much lower. A thin wall also adds circumferential "ring" modes, `ωₙ = (h/R²)·√(E/(12ρ(1−ν²)))·n(n²−1)/√(n²+1)`. These are the clang of a pipe or a can. **Provenance: standard mechanics** (Rayleigh's inextensional ring, applied as a long-thin-shell approximation; verify before quoting).
+
+**Circular plate (free edge):** `f = λ²/(2π·a²)·√(D/(ρh))`, `D = E·h³/(12(1−ν²))`, λ² ≈ 5.25, 9.08, 12.23, 20.52, … for ν ≈ 0.33. **Provenance: literature, after Leissa (1969)**. The table is from memory and must be checked against the source.
+
+**Strike position.** For beams the contact position `xₛ` enters through the exact mode shape: `Mode.mass = M / φₙ(xₛ)²`. Striking on a node silences that mode. **Derived here** from the standard modal projection.
+
+**Hardness from materials (Hertz):**
+
+```
+k = 4/3 · E* · √R        1/E* = (1−ν₁²)/E₁ + (1−ν₂²)/E₂
+```
+
+**Formula provenance — Standard contact mechanics** (Hertz; Johnson, *Contact Mechanics*, 1985). `R` is the radius of curvature of the corner or edge that touches first, not the object size. This makes `k` a consequence of "wood on concrete" rather than a free knob. With `R = 3 mm`, wood→concrete gives ≈6×10⁸ and steel→concrete ≈2×10⁹, inside the range stage 2B already tested.
+
+**Is "impact" just modal + velocity + hardness?** Essentially yes. The impact layer adds no new resonator. It turns (striker mass, `v`, `k`, `α`, `μ`) into a force pulse that drives the object's own modal bank. For a dropped object the "striker" is the object's own rigid-body mass and the floor is the other contact partner. That is the stage 2C setup.
+
+---
+
+## Stage 3a · Friction / Sliding — `core/friction.py`
 
 **Analogy**: Under a microscope, a tabletop is covered in tiny hills. Sliding a box across it means striking thousands of these hills every second. The sum of all those microscopic impacts becomes a “shhh” noise.
 
@@ -194,7 +225,7 @@ The two values are the `cut_min` and `cut_per_v` parameters of `friction_exciter
 
 ---
 
-## Stage 4b · Aggregate Layer (Gravel/Dirt/Grass, PhISEM v2) — `core/aggregate.py`
+## Stage 3b · Aggregate Layer (Gravel/Dirt/Grass, PhISEM v2 + v3 grass) — `core/aggregate.py`
 
 **Analogy**: Stepping on a pile of gravel makes many stones collide with one another over a short time. The timing, loudness, and pitch of every collision are random.
 
@@ -212,11 +243,19 @@ bed = band-passed white noise × √(smoothed energy envelope)      out = (1−m
 
 **Formula provenance — Project heuristic.** The continuous AM-noise bed, square-root envelope mapping, and `mix` blend are v2 design additions. They are inspired by the perceptual goal of aggregate-surface synthesis in [5, 6] but are not equations from either source.
 
-Grass is different: rubbing grass blades do not produce “dings.” The sound is fundamentally a continuous rustle formed from a vast number of microscopic friction events. The model takes high-frequency white noise and modulates its amplitude with fluctuations in grain energy—random amplitude modulation. The grass preset uses `mix = 0.8`: 80% of the result is this noise and 20% is fine, brittle impacts.
+Grass is different: rubbing grass blades do not produce “dings.” The sound is fundamentally a continuous rustle formed from a vast number of microscopic friction events. The model takes high-frequency white noise and modulates its amplitude with fluctuations in grain energy—random amplitude modulation. The v2 grass preset used `mix = 0.8`: 80% of the result was this noise and 20% fine, brittle impacts.
+
+**v3 grass (layered).** Listening showed v2 grass as a smooth hiss swell: 80% stationary 2.8–11 kHz noise under a slow envelope has no events the ear can latch onto. v3 builds grass from three layers rendered by the same grain engine: (a) *swish*, 10–60 ms noise grains with a soft attack, each with its own band in 0.7–6 kHz (blades brushing past each other); (b) *crackle*, sparse sub-millisecond clicks (stems snapping); (c) a thin 0.9–4.5 kHz bed for continuity. Grain amplitudes are lognormal rather than exponential, so a few loud swishes and snaps stand out.
+
+```
+grain envelope = (1 − e^(−t/tₐ))·e^(−t/τ),  tₐ = attack·τ        amplitude ~ LogNormal(0, σ)
+```
+
+**Formula provenance — Project heuristic.** The layer split, attack envelope, lognormal amplitudes and every preset value are ear-tuning choices informed by the stochastic-event framing of [5, 6], not equations from those sources. Measured on the stage 3 render: spectral centroid dropped from ≈7.2 kHz (v2) to ≈3.9 kHz, and the 10 ms level fluctuation roughly doubled (≈1.6 → ≈3.4 dB). `stage3_aggregate_grass_v2.wav` is rendered alongside for A/B listening.
 
 ---
 
-## Stage 5 · Ground Layer (Simplified Qu & James 2019) — `core/ground.py`
+## Stage 4 · Ground Layer (Simplified Qu & James 2019) — `core/ground.py` (legacy v1, then unified v2)
 
 **Analogy**: The same cup falling on a thin wooden floor produces an extra low “thud” compared with falling on solid concrete. That is the entire floor panel sounding, not the cup.
 
@@ -228,9 +267,34 @@ impulse area = m·v  →  several heavily damped 55–240 Hz modes   +   low-pas
 
 The floor is approximated as a large, heavy plate with low resonant frequencies and rapid energy dispersal, producing a low, short “thud.” Its weight is controlled by the falling momentum `m·v`. A 12-millisecond flash of noise adds fine “clack” detail at contact. This is only a perceptual stand-in for acceleration noise, not a reduced derivation of the acceleration-noise field in [8] or the ground-radiation solution in [7]. See the docstring in `core/ground.py` for the omitted components, including the elastic half-space solution, radiation directivity, and detailed force coupling. Qu & James explicitly note that finite-depth floors and building resonances are outside their half-space model [7, Sec. 6]; the modal floor approximation here is therefore an added real-time design choice.
 
+### v2 · Unified two-body contact — `core/contact.py`, `core/radiation.py`
+
+The text above describes the **legacy** path (`ground_layer`). It had two weaknesses. First, the floor was driven by momentum `m·v`, so it ignored how hard the object is: a rubber ball and a steel ball of the same mass made the same floor sound. Second, the object and the floor were each peak-normalized and mixed with hand-set gains, so their balance was a mix decision, not physics.
+
+The unified path does not check whether the other thing is the ground. Every contact has two bodies, and **one** force pulse drives both:
+
+```
+k = Hertz(object material, floor material, R)       f(t) = Hunt–Crossley pulse (object mass as striker)
+object  = modes driven by f(t)                       click = rigid-body acceleration −f(t)/M
+floor   = floor modes driven by f(t), coupling mass m_floor / gₙ²
+p(t) ≈ ρ₀ · S · a(t) / (2π r)   for every body (r = 1 m)
+```
+
+**Formula provenance.** The pressure proxy is **standard acoustics**: a low-ka baffled-piston (simple-source) approximation, used only to balance levels. Driving both bodies with one contact force is the **open-loop dual-bank** approximation of O'Brien et al. and van den Doel et al. (see `two_body_impact_related_work.md`). The floor's compliance is not fed back into the contact. The click term is the simplest reading of acceleration noise [8]: a rigid body that decelerates abruptly radiates a pulse shaped like `f(t)/M`. The floor's `modal_mass` and `rad_area` values are **project presets**: about 6 kg for a plank-floor panel and 400 kg for a slab.
+
+**What this buys:**
+- **The surface is a physical property, not a mix knob.** The same wood block dropped on a wood floor gives a floor layer ≈39 dB stronger than on concrete (stage 4 gate), because the slab barely moves.
+- **Hardness shapes the floor sound automatically.** A soft object makes a long, smooth pulse that excites the floor's low modes but little else. A hard object makes a short one.
+- **Momentum is conserved.** The resampled force pulse integrates to `m·(v_in − v_out)` (stage 4 gate, < 1 %).
+
+**Known limits:**
+- The piston proxy ignores radiation efficiency, so low bending modes of small objects are probably too loud relative to reality.
+- The click is the crudest possible acceleration-noise model.
+- The legacy surface noise burst is gone. Surface roughness noise belongs to the friction and aggregate layers.
+
 ---
 
-## Stage 6 · Simulated Physical Trajectories — `sim/trajectories.py`
+## Stage 5 · Simulated Physical Trajectories — `sim/trajectories.py`
 
 **Analogy**: Instead of using a game engine, apply high-school physics directly to calculate when a ball lands and how fast it is moving at impact, then feed this sequence of numbers into all the preceding models.
 
@@ -242,7 +306,7 @@ v₀ = √(2·g·h₀)        v_{k+1} = ε·v_k  (ε = 0.72)        Δt_k = 2·v
 
 **Formula provenance — Standard mechanics plus a project parameter.** The first and third expressions are constant-gravity kinematics, and the second is the definition of a constant coefficient of restitution. The chosen value `ε = 0.72` is a demo parameter, not a value taken from the cited contact-sound papers.
 
-Free fall gives the first impact speed. After each bounce, only 72% of the speed remains (coefficient of restitution `ε`). The time to rise and fall again is `2v/g`. The speed decreases and the intervals become shorter, producing the familiar rhythm of “faster and quieter with every bounce.” Each landing triggers one Stage 3 impact plus the Stage 5 ground layer.
+Free fall gives the first impact speed. After each bounce, only 72% of the speed remains (coefficient of restitution `ε`). The time to rise and fall again is `2v/g`. The speed decreases and the intervals become shorter, producing the familiar rhythm of “faster and quieter with every bounce.” Each landing triggers one Stage 2B impact plus the Stage 4 ground layer.
 
 **Sliding box**:
 
@@ -252,9 +316,65 @@ v(t) = v₀ − μ·g·t
 
 **Formula provenance — Standard mechanics.** This follows from constant Coulomb kinetic friction on level ground, `a = −μg`. It generates a control trajectory for the sound model; it is not Turchet's friction-force equation.
 
-Friction decelerates the box uniformly until it stops (`μ` is the coefficient of friction). Its velocity curve drives Stage 4a directly, so the sliding sound naturally becomes quieter and duller before fading to silence.
+Friction decelerates the box uniformly until it stops (`μ` is the coefficient of friction). Its velocity curve drives Stage 3a directly, so the sliding sound naturally becomes quieter and duller before fading to silence.
 
 **Tumbling**: a random Poisson-burst event stream of `(time, velocity)` pairs used to stress-test overlapping voices. **This is a project test-signal heuristic**, not a physical tumbling model taken from a cited paper.
+
+---
+
+## Scenes · Fully Specified Bodies — `core/bodies.py`, `proto/scenes/`
+
+**Why**: the stage renders mixed test ingredients. The "bouncing ball" rang with a mug's hand-typed partials, and the "wood block" mode masses didn't add up to the block's mass. In a scene, every file is *mover hits target at v*, and both are real objects with stated size and material.
+
+**Bodies and their modes**
+
+| body | model | provenance |
+|---|---|---|
+| solid ball | Lamb's free-sphere spheroidal equation, solved numerically: `η = ωa/c_T`; l=2 gives η = 2.640 at ν = 0.25 | **Literature** (Lamb 1882; equation form as used by Saviot & Murray), validated against the classic value |
+| floor | simply supported plate `f_mn = (π/2)√(D/ρh)((m/a)² + (n/b)²)`, coupling mass `M/φ²` | **Standard mechanics** (Leissa 1969); *installed* loss factor = project preset |
+| bar | free-free beam (stage 2C) | standard mechanics |
+| stick | rigid striker, tip effective mass `M/3` (rod pivoting about its end) | standard mechanics; omitting the stick's own ring is a **project decision** (see below) |
+
+**Contact**
+- **Hardness.** `k = 4/3·E*·√R`, with `1/R = 1/R₁ + 1/R₂`. Wood uses its across-grain modulus (`E_contact` ≈ 1 GPa), because impacts indent wood across the grain. This gives a wooden stick about 0.25–0.34 ms contacts, which is typical.
+- **Moving mass.** For a free target (a suspended bar) the moving mass is the reduced mass `m₁m₂/(m₁+m₂)`.
+- **Both bodies in one solve.** Both bodies' modes go into one coupled Hunt–Crossley solve. The compression is `x = s − Σq_mover − Σq_target`, so this is the coupled model itself, not the open-loop approximation.
+- **Restitution.** μ is calibrated so the mover's restitution matches a preset at the first impact (rubber 0.8, wood 0.6). Later bounces then keep `μ·v` constant, which keeps restitution roughly constant. Fixed μ makes slow bounces nearly elastic, so the ball never settles.
+
+**Why the stick has no ring.** A free-free rod hit at its tip is very light in bending: every mode has tip mass `M/4`. In the coupled solve, its modes absorbed 80–95 % of the impact energy. Driven open-loop, they gained more energy than the swing carried. Neither matches a hand-held stick, whose grip damps and loads it, so the stick contributes only its contact click until a grip model exists.
+
+**Radiation (one rule for all bodies)**
+
+```
+p_rms ≈ ρc · √(σ·S/2π) · v_rms / r          (from W = ρcSσ⟨v²⟩, hemispherical far field)
+compact body:  σ = (ka)⁴ / (4 + (ka)⁴),  a = √(S/π)        (oscillating rigid sphere, dipole)
+plate (floor): Maidanik corner + edge terms below f_c, (1 − f_c/f)^−½ above, capped at σ(f_c)
+```
+
+**Formula provenance.** The power relation and the dipole sphere are **standard acoustics**. The plate terms are Maidanik (1962), as quoted by Oppenheimer & Dubowsky (1997) in [Proc. ACOUSTICS 2016, p41](https://www.acoustics.asn.au/conference_proceedings/AASNZ2016/papers/p41.pdf). That text was garbled in extraction, so verify the corner term's constant against Maidanik or Beranek & Vér before quoting it.
+
+**Approximations to state in the thesis:**
+- Band-averaged σ is applied per mode.
+- The `√σ` filter on the click is zero-phase.
+- Elastic modes of compact bodies use the same dipole σ, although their real radiation order differs.
+
+**What this explains:**
+- A plank floor (coincidence ≈ 680 Hz) and a 6 mm steel plate (≈ 2 kHz) radiate poorly below coincidence (σ ≈ 0.03–0.17).
+- A 15 cm slab radiates efficiently above about 120 Hz but barely moves.
+- A small solid rubber ball is a weak radiator (σ ≈ 0.01 at its 1.5 kHz mode).
+
+So on concrete you mostly hear the ball, while on wood and steel floors you mostly hear the floor.
+
+**The other scene families**
+- **Slide, model A (noise).** Speed is `v(t) = v₀ − μ_k·g·t`. The steady Coulomb force `μ_k·M·g` is silent; what you hear is its fluctuation. `friction_exciter` provides the shape, scaled so that at 0.5 m/s its rms equals `roughness·μ_k·M·g`. The result drives the plank, the floor and the plank's click, exactly like an impact force. The per-floor `μ_k`, roughness and asperity spacing (brightness per m/s) are **project presets**.
+- **Slide, model B (surface profile, `core/slide_profile.py`).**
+  - **Profile by position.** A fixed profile `z(x)` (fractal `k^−γ` + texture resonance `k_r` + meso features) is read at `x(t) = ∫v dt` after contact-patch averaging (Gaussian, σ = 0.1 mm). **Literature:** FoleyAutomatic.
+  - **Follow or lift off.** The contact (mass m_p, pressed by `N(t)`) follows while `z_tt > −N/m_p`; otherwise it flies at `y_tt = −N/m_p`. **Physical form of Agarwal et al.'s curvature limit.**
+  - **Landings.** Each landing is a micro-impact with impulse `J = m_p·(z_t − y_t)`, shaped as a Hertz half-sine of duration `hertz_contact_time(m_p, k_asperity, v_rel)`. **Derived here.**
+  - **What drives the bodies.** The force is the normal-force fluctuation `N + m_p·a − N` in contact, `−N` in flight, plus the landing pulses.
+  - **Presets.** The values of m_p, σ, h_rms, γ, k_r and the meso features are **project presets** (see `docs/sliding_sound_literature.md` §4).
+- **Tumble.** Each landing hits a random point along the block, so the same modes are coloured differently every time. Edges land first (3 mm radius). An optional second "slap" of the other end follows 10–40 ms later. Rebound comes from the contact solve, and an edge catching the floor turns part of the sideways speed into a new hop. This is a **project heuristic** stand-in for rigid-body rotation, not a rigid-body simulation. Each hit drives the block with its own contact-point coupling (linear superposition).
+- **Footsteps.** The envelope is a heel strike (5 ms attack, 70 ms decay) plus a toe hump 150 ms later at 60 %, with ±10 % level and ±15 ms timing jitter. It drives the PhISEM aggregate presets. Levels are **not physical**, and the shoe-on-ground thud is not modelled.
 
 ---
 

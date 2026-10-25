@@ -100,6 +100,26 @@ def _contact_stats(x_hist: np.ndarray, h: float):
     return first_len * h, n_contacts, span
 
 
+def hertz_stiffness(mat_a: str | dict, mat_b: str | dict,
+                    radius: float) -> float:
+    """Hertz sphere-on-flat stiffness k (N/m^1.5, use with alpha=1.5).
+
+        k = 4/3 E* sqrt(R),   1/E* = (1-nu_a^2)/E_a + (1-nu_b^2)/E_b
+
+    radius = effective radius of curvature at the contact point (m): the
+    local rounding of the corner/edge that touches first, not the object
+    size. Materials are names from materials.PHYSICAL or dicts with E, nu
+    (E_contact, if given, overrides E -- wood is indented across the grain).
+    This ties "hardness" to the two materials instead of a free knob.
+    """
+    from .materials import PHYSICAL
+    a = PHYSICAL[mat_a] if isinstance(mat_a, str) else mat_a
+    b = PHYSICAL[mat_b] if isinstance(mat_b, str) else mat_b
+    ea, eb = a.get("E_contact", a["E"]), b.get("E_contact", b["E"])
+    e_star = 1.0 / ((1 - a["nu"]**2) / ea + (1 - b["nu"]**2) / eb)
+    return 4.0 / 3.0 * e_star * np.sqrt(radius)
+
+
 def hertz_contact_time(m: float, k: float, v: float) -> float:
     """Analytic contact-time estimate for the lossless Hertz case alpha=1.5.
 
