@@ -116,10 +116,27 @@ def body_sound(body: Body, force: np.ndarray, fs: int, sign: float) -> dict:
         y = ModalBank(weighted, fs).process(force)
         out["modes"] = np.diff(y, prepend=0.0) * fs      # displacement -> velocity
     if not body.fixed:
+        # rigid-body motion of the WHOLE object radiates as a compact dipole
+        # even when its bending modes radiate like a plate: Maidanik's plate
+        # efficiency does not fall to 0 at low f, and through the 1/(i w)
+        # of accel_to_pressure it blows up near DC (a free 0.2 kg box)
         out["click"] = accel_to_pressure(sign * force / body.mass, fs,
-                                         body.radiator, body.area)
+                                         {"kind": "compact"}, body.area)
     out["mix"] = out["modes"] + out["click"]
     return out
+
+
+def with_contact_damping(body: Body, loss: float, why: str) -> Body:
+    """Copy of `body` whose modes also lose energy into a contact: decay
+    d_n += pi f_n * loss (a loss factor added to tan phi). An object lying
+    on its face is held along that face, so its bending modes ring far
+    shorter than when it hangs free (contact damping, Zheng & James 2011)."""
+    from dataclasses import replace
+    modes = [replace(m, decay=m.decay + np.pi * m.freq * loss)
+             for m in body.modes]
+    return replace(body, modes=modes,
+                   notes=body.notes + [f"contact damping: loss factor +{loss:g} "
+                                       f"while in contact ({why})"])
 
 
 def mode_summary(body: Body, n: int = 4) -> str:

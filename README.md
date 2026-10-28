@@ -94,6 +94,10 @@ radiation-efficiency model. Nothing is hand-mixed.
 & $py -m proto.scenes.slide          # plank slides to a stop: A noise vs B surface-profile model
 & $py -m proto.scenes.tumble         # small wood/steel block tumbles to rest
 & $py -m proto.scenes.footsteps      # 4 steps on gravel/dirt/grass (+ old grass)
+& $py -m proto.scenes.roll           # ball/can/battery rolling, each vs a real recording
+& $py -m proto.scenes.drag           # plank/steel box dragged by hand, vs real recordings
+& $py -m proto.scenes.roll spheres   # small/large solid wood and steel balls on a varnished wood floor
+& $py -m proto.scenes.drag boxes     # small/large cardboard and steel boxes, one long pull on concrete
 ```
 
 These replace the stage 3–5 listening renders (sliding box, aggregate
@@ -136,6 +140,8 @@ proto/
               plan_and_brainstorm.md (next steps, design questions)
               archetypes.md (sourced archetype list: materials, formulas)
               sliding_sound_literature.md (sliding models, diagnosis)
+              rolling_sliding_vs_recordings.md (recordings analysis,
+              rolling model, slide fixes, render-vs-real numbers)
   recordings/ put real reference recordings here (see its README)
 ```
 

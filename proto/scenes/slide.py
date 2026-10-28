@@ -31,6 +31,7 @@ from ..util import FS
 from .common import G, Scene, write_family
 
 V0 = 2.5
+SHOVE = 0.08        # s, hand push from rest to V0
 V_REF = 0.5
 M_CONTACT = 0.010   # model B: effective contact mass (kg), preset
 # floor slug: (mu_k wood-on-floor, roughness = fluct. rms / Coulomb force,
@@ -57,6 +58,11 @@ def friction_force(speed, M, mu_k, rough, cut_per_v, stick_slip=False):
 def slide_scene(slider, flr, model, stick_slip=False):
     mu_k, rough, cut_per_v = SURFACES[flr.slug]
     speed = sliding_box(v0=V0, friction_mu=mu_k, fs=FS, extra_time=1.0)
+    # the hand's shove takes SHOVE s (raised cosine): a speed step from rest
+    # in one sample is an acceleration impulse in the profile force (and a
+    # click in the noise model), heard as a bump at the start
+    n_sh = int(SHOVE * FS)
+    speed[:n_sh] *= 0.5 - 0.5 * np.cos(np.pi * np.arange(n_sh) / n_sh)
     i0 = int(0.2 * FS)
     F = np.zeros(len(speed) + i0)
     t_stop = V0 / (mu_k * G)

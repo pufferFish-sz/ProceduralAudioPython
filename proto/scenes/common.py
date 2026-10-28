@@ -37,6 +37,8 @@ class Scene:
     target: Body | None
     stems: dict[str, np.ndarray]   # body slug -> pressure proxy
     facts: list[str] = field(default_factory=list)
+    trim_db: float = 0.0           # designer level trim (<= 0), applied AFTER
+                                   # the family's shared gain; not physics
 
     @property
     def mix(self) -> np.ndarray:
@@ -142,8 +144,13 @@ def write_family(family: str, title: str, intro: str, scenes: list[Scene],
     (out / "stems").mkdir(parents=True, exist_ok=True)
     for old in list(out.glob("*.wav")) + list((out / "stems").glob("*.wav")):
         old.unlink()
+    # the shared gain comes from the UNTRIMMED mixes, so a trim really
+    # lowers that file instead of being normalized back up
     peak = max(float(np.max(np.abs(s.mix))) for s in scenes) or 1.0
     g = db_to_lin(peak_db) / peak
+    if any(s.trim_db > 0 for s in scenes):
+        raise ValueError("trim_db must be <= 0 (it is applied after the "
+                         "shared gain and could clip)")
 
     lines = [f"# {title}", "", intro, "",
              level_note or ("All files in this folder share one gain: louder "
@@ -151,11 +158,12 @@ def write_family(family: str, title: str, intro: str, scenes: list[Scene],
              "Stems in `stems/` are each sound source on its own (same gain).",
              ""]
     for s in scenes:
-        _write_wav_file(out / f"{s.name}.wav", _fade(s.mix, fs) * g, fs)
+        gs = g * db_to_lin(s.trim_db)
+        _write_wav_file(out / f"{s.name}.wav", _fade(s.mix, fs) * gs, fs)
         if len(s.stems) > 1:              # a single stem == the mix
             for slug, y in s.stems.items():
                 _write_wav_file(out / "stems" / f"{s.name}__ONLY-{slug}.wav",
-                                _fade(y, fs) * g, fs)
+                                _fade(y, fs) * gs, fs)
         share = _energy_share(s)
         bodies = [b for b in (s.mover, s.target) if b is not None]
         lines += [f"## `{s.name}.wav`", "", f"**What you hear:** {s.what}", ""]
@@ -166,6 +174,10 @@ def write_family(family: str, title: str, intro: str, scenes: list[Scene],
             lines.append(f"- **Target:** {s.target.description}. Lowest "
                          f"modes: {mode_summary(s.target)} "
                          f"({len(s.target.modes)} modes used).")
+        if s.trim_db:
+            s.facts.append(f"level trim {s.trim_db:+g} dB (designer setting, "
+                           "not physics: this file is that much quieter than "
+                           "the shared gain makes it)")
         lines += [*[f"- {f}" for f in s.facts],
                   "- Energy share: " + ", ".join(
                       f"{k} {v:.0f} %" for k, v in share.items()),

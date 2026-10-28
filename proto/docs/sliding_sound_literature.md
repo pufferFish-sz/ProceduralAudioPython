@@ -250,3 +250,10 @@ Natural next steps:
 - **Derive m_p and σ from the slider's local impedance and the Hertz
   contact radius** instead of presets.
 - **Record a real plank sliding on each floor** to compare against.
+
+**Follow-up (2026-10-27):** compared with real recordings in
+[`rolling_sliding_vs_recordings.md`](rolling_sliding_vs_recordings.md).
+The "near-Gaussian" render statistics above turned out to be what real
+slides have. The audible problems were the plank's mode lines, a
+profile-interpolation bug (the arcs) and single-track clicking. Model C in
+`scenes/drag.py` fixes them.

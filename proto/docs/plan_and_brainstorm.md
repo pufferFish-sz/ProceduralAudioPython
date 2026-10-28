@@ -125,7 +125,7 @@ Proposed priority (★ = core thesis scope):
 | ★ drop / single impact | impact + ground | done (stage 2C/4) |
 | ★ bounce & settle | impact sequence | done (stage 5) |
 | ★ slide / scrape | friction | done (stage 3) |
-| ★ **roll** | rolling exciter (micro-impacts filtered by surface profile; van den Doel 2001, Rath & Rocchesso 2005 **(verify)**) | **missing**, and needed for throw/drop of round objects |
+| ★ **roll** | rolling exciter (micro-impacts filtered by surface profile; van den Doel 2001, Rath & Rocchesso 2005 **(verify)**) | **prototype** (`core/rolling.py`, `scenes/roll.py`), compared with recordings in `rolling_sliding_vs_recordings.md` |
 | ★ throw & tumble | impact + roll + slide switching | stage 5 has impacts only |
 | footsteps on aggregate | aggregate | done (grass needs work) |
 | contact damping (object resting on floor stops ringing faster) | per-mode damping multiplier while in contact (Zheng & James 2011) | missing, cheap |

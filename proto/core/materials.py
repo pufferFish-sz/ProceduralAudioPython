@@ -52,8 +52,18 @@ PHYSICAL: dict[str, dict] = {
     "plastic": dict(E=2.5e9, rho=1100.0, nu=0.37),
     "rubber":  dict(E=0.01e9, rho=1100.0, nu=0.49),
     "stone":   dict(E=50e9, rho=2700.0, nu=0.25),
-    # surface-only entry (floors): no tan_phi preset, never a resonator here
+    # corrugated cardboard, 4 mm board treated as a homogeneous plate:
+    # EFFECTIVE E and rho chosen so that bending stiffness D ~ 10 N m and
+    # mass ~ 0.55 kg/m^2 (typical single-wall board), not liner properties
+    "cardboard": dict(E=1.7e9, rho=140.0, nu=0.30),
+    # surface-only entries (floors): no tan_phi preset, never a resonator here
     "concrete": dict(E=30e9, rho=2400.0, nu=0.20),
+    # glazed ceramic floor tile (porcelain E ~ 50-70 GPa, rounded)
+    "ceramic": dict(E=60e9, rho=2300.0, nu=0.22),
+    # cut-pile rug: EFFECTIVE compressive modulus of the pile under a small
+    # object (order of magnitude, ~0.2 MPa: a can sinks ~0.2 mm), not a
+    # fibre property
+    "carpet": dict(E=0.2e6, rho=200.0, nu=0.30),
 }
 
 # Hand-authored "shapes": mode frequency sets + relative gains. These are NOT
